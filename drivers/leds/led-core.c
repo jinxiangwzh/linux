@@ -276,7 +276,7 @@ void led_set_brightness_nopm(struct led_classdev *led_cdev,
 		return;
 
 	/* If brightness setting can sleep, delegate it to a work queue task */
-	led_cdev->delayed_set_value = value;
+	led_cdev->delayed_set_value = value;  // 在work中稍后要设置的值
 	schedule_work(&led_cdev->set_brightness_work);
 }
 EXPORT_SYMBOL_GPL(led_set_brightness_nopm);

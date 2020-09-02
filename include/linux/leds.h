@@ -131,10 +131,10 @@ struct led_classdev {
 	struct timer_list	 blink_timer;
 	int			 blink_brightness;
 	int			 new_blink_brightness;
-	void			(*flash_resume)(struct led_classdev *led_cdev);
+	void			(*flash_resume)(struct led_classdev *led_cdev);  // resume后要执行的函数
 
 	struct work_struct	set_brightness_work;
-	int			delayed_set_value;
+	int			delayed_set_value;  // 延迟设置值,这个变量咱存这个要设置的值
 
 #ifdef CONFIG_LEDS_TRIGGERS
 	/* Protects the trigger data below */
