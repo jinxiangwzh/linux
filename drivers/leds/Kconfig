@@ -908,6 +908,10 @@ config LEDS_SGM3140
 	help
 	  This option enables support for the SGM3140 500mA Buck/Boost Charge
 	  Pump LED Driver.
+config LEDS_AW9106B
+	tristate "LED driver for AW9106B"
+	help
+	  Say Y to enable the AW9106B LED driver.
 
 comment "LED Triggers"
 source "drivers/leds/trigger/Kconfig"

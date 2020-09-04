@@ -100,6 +100,7 @@ obj-$(CONFIG_LEDS_SPI_BYTE)		+= leds-spi-byte.o
 
 # LED Userspace Drivers
 obj-$(CONFIG_LEDS_USER)			+= uleds.o
+obj-$(CONFIG_LEDS_AW9106B)       += led-simple.o
 
 # LED Triggers
 obj-$(CONFIG_LEDS_TRIGGERS)		+= trigger/

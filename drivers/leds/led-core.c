@@ -418,6 +418,7 @@ static void led_parse_fwnode_props(struct device *dev,
 	}
 }
 
+//添加对组成LED类设备名称的通用支持
 int led_compose_name(struct device *dev, struct led_init_data *init_data,
 		     char *led_classdev_name)
 {

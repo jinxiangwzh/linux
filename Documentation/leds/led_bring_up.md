@@ -165,9 +165,211 @@ static int __init leds_init(void)
 
 - 3.属性
   
+  属性是通过led_groups这个结构体添加的,进一步看，分别到了`dev_attr_brightness`、`dev_attr_max_brightness`和`bin_attr_trigger`。
+  然而搜索这几个变量却搜索不到。网上看代码发现`dev_attr_brightness`是通过
+  `static DEVICE_ATTR_RW(brightness);`定义，`dev_attr_max_brightness`是通过`static DEVICE_ATTR_RO(max_brightness);`定义，`bin_attr_trigger`是通过`static BIN_ATTR(trigger, 0644, led_trigger_read, led_trigger_write, 0);`定义。
+  下面对这些宏进行展开
+  ```c
+  static DEVICE_ATTR_RW(brightness) 
+  ----> 
+  #define DEVICE_ATTR_RW(_name)   \
+          struct device_attribute dev_attr_##_name = __ATTR_RW(_name)
+  ---->
+  struct device_attribute dev_attr_brightness = __ATTR_RW(brightness)
+  ---->右边继续展开
+  __ATTR(brightness, 0644, brightness##_show, brightness##_store)
+  ---->右边继续展开
+  {
+  .attr = {.name = __stringify(_brightness),				\
+		 .mode = VERIFY_OCTAL_PERMISSIONS(_mode) },		\
+  .show	= _show,						\
+  .store	= _store,
+  }		
+  ---->
+  {
+  .attr = {.name = brightness,				\
+	       .mode = VERIFY_OCTAL_PERMISSIONS(0644) },		\
+  .show	= brightness_show,						\
+  .store	= brightness_store,
+  }
+  ```
+  show数据可以使用cat读出来,store可以使用echo写入
+
+  展开就到这，回到这个结构体
+  ```c
+  static struct attribute *led_class_attrs[] = {
+	&dev_attr_brightness.attr,
+	&dev_attr_max_brightness.attr,
+	NULL,
+  };
+  ```
+  led_class_attrs结构体数组中的数据就上上述展开的
+  ```c
+  .attr = {.name = brightness,				\
+	       .mode = VERIFY_OCTAL_PERMISSIONS(0644) },
+  ```
+
+  >写代码show就是把读到的数据填充到接口的buf里，store就是把数据写入
+**注册**
+
+注册接口有两个，
+
+```c
+/**
+ * led_classdev_register - 注册一个新的led类对象
+ * @parent: 驱动LED的控制设备
+ * @led_cdev: the led_classdev structure for this device
+ *
+ * Register a new object of LED class, with name derived from the name property
+ * of passed led_cdev argument.
+ *
+ * Returns: 0 on success or negative error value on failure
+ */
+static inline int led_classdev_register(struct device *parent,
+					struct led_classdev *led_cdev)
+{
+	return led_classdev_register_ext(parent, led_cdev, NULL);
+}
+```
+
+也可以在注册的时候初始化led数据
+
+```c
+int led_classdev_register_ext(struct device *parent,
+			      struct led_classdev *led_cdev,
+			      struct led_init_data *init_data)
+```
+示例:
+```c
+	init_data.fwnode = flash->indicator_node;
+	init_data.devicename = "as3645a";
+	init_data.default_label = "indicator";
+
+	rval = led_classdev_register_ext(&flash->client->dev, iled_cdev,
+					 &init_data);
+```
+
+注册的代码比较长，就不贴出来了。
+完成的主要功能如下：
+- 1.根据初始据使用led_compose_name接口形成一个名字（没有初始数据就用led_cdev中给定的名字）。
+- 2.判断是否已经有这个名字的led设备
+- 3.把led设备注册到sysfs中
+- 4.led链表中的一些处理
+
+当我们使用led驱动框架去编写驱动的时候，这个led_classdev_register函数的作用类似于我们之前使用file_operations方式去注册字符设备驱动时的register_chrdev函数。
+
+**注销**
+
+```c
+void led_classdev_unregister(struct led_classdev *led_cdev)
+```
+
+**退出**
+
+```c
+class_destroy(leds_class);
+```
+销毁注册的led类对象
+
+**其他**
+
+设置led闪烁
+```c
+void led_blink_set(struct led_classdev *led_cdev,
+		   unsigned long *delay_on,
+		   unsigned long *delay_off)
+
+```
+
+设置led闪烁一次
+```c
+void led_blink_set_oneshot(struct led_classdev *led_cdev,
+			   unsigned long *delay_on,
+			   unsigned long *delay_off,
+			   int invert)
+```
+停止led闪烁
+```c
+void led_stop_software_blink(struct led_classdev *led_cdev)
+```
+## 三：示例
+
+**1.led最简单示例**
+
+代码路径:/deivers/leds/led-simple.c
+
+>说明：led连接在aw9106b芯片上,通过IIC控制led。
+
+1.在drivers/leds目录下创建一个led_test.c的文件
+
+写led驱动，首先它是一个module，而module需要实现init和exit。所以我们先实现这两个函数,
+
+```c
+static int __init aw9106b_driver_init(void)
+{
+	
+}
+module_init(aw9106b_driver_init);
+
+static void __exit aw9106b_driver_exit(void)
+{
+	
+}
+module_exit(aw9106b_driver_exit);
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("LEDs driver AW9106B&Salix");
+```
+上面说了我们其实是控制I2C设备来间接控制led.控制I2C module有更简单的实现方式，上面的接口我们改为
+
+```c
+#include <linux/module.h>
+#include <linux/i2c.h>
+
+static struct i2c_driver aw9106b_i2c_driver = {
+	.driver = {
+		.name = "aw9106b-leds",
+		.of_match_table = aw9106b_dt_ids,
+	},
+	.probe = aw9106b_probe,
+	.remove = aw9106b_remove,
+	.id_table= aw9106b_id_table,
+};
+
+module_i2c_driver(aw9106b_i2c_driver);
+```
+
+> 为啥要实现这几个成员，因为是最基本的，大多数驱动实现这个几个就好，感兴趣额的可以查看struct i2c_driver结构体。或者查看`drivers/i2c/i2c_bring_up.md`。
+
+使用module_i2c_driver实现了i2c_add_driver和i2c_del_driver，即module_init和module_exit.
+下面我们就分别实现结构体中的内容。
+
+`struct i2c_driver`”继承于“`struct device_driver`，`.driver`就是父类的成员，这个driver成员中比较重要的就是名字和`of_match_table`
+
+```c
+struct of_device_id aw9106b_dt_ids[] = 
+{
+  {.compatible="qcom,AW9106A",},
+  {}，  //TODO：不知道为啥看到的所有代码几乎都加一个空的
+};
+```
+
+这里的compatible对应的字符串很重要,系统要根据这个字符串匹配dts文件。dts文件怎么修改下面再说。
+
+接着实现probe和remove，进入`12c.h`查看这两个类型。
+```c
+/* Standard driver model interfaces */
+int (*probe)(struct i2c_client *, const struct i2c_device_id *);
+int (*remove)(struct i2c_client *);
+```
+从注释可以看出，一个标准的module至少要实现这两个接口。
+
+>probe何时被调用：在总线上驱动和设备的名字匹配，就会调用驱动的probe函数
+
+对于probe的功能主要是做一些资源分配、注册、初始化等
 
 
 
+## 四：总结
 
 
 
