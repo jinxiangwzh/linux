@@ -210,88 +210,89 @@ static int __init leds_init(void)
   ```
 
   >写代码show就是把读到的数据填充到接口的buf里，store就是把数据写入
-**注册**
 
-注册接口有两个，
+- 4注册
 
-```c
-/**
- * led_classdev_register - 注册一个新的led类对象
- * @parent: 驱动LED的控制设备
- * @led_cdev: the led_classdev structure for this device
- *
- * Register a new object of LED class, with name derived from the name property
- * of passed led_cdev argument.
- *
- * Returns: 0 on success or negative error value on failure
- */
-static inline int led_classdev_register(struct device *parent,
-					struct led_classdev *led_cdev)
-{
-	return led_classdev_register_ext(parent, led_cdev, NULL);
-}
-```
+  注册接口有两个，
 
-也可以在注册的时候初始化led数据
+  ```c
+	/**
+	* led_classdev_register - 注册一个新的led类对象
+	* @parent: 驱动LED的控制设备
+	* @led_cdev: the led_classdev structure for this device
+	*
+	* Register a new object of LED class, with name derived from the name property
+	* of passed led_cdev argument.
+	*
+	* Returns: 0 on success or negative error value on failure
+	*/
+	static inline int led_classdev_register(struct device *parent,
+						struct led_classdev *led_cdev)
+	{
+		return led_classdev_register_ext(parent, led_cdev, NULL);
+	}
+  ```
 
-```c
-int led_classdev_register_ext(struct device *parent,
-			      struct led_classdev *led_cdev,
-			      struct led_init_data *init_data)
-```
-示例:
-```c
+  也可以在注册的时候初始化led数据
+
+  ```c
+	int led_classdev_register_ext(struct device *parent,
+					struct led_classdev *led_cdev,
+					struct led_init_data *init_data)
+  ```
+  示例:
+  ```c
 	init_data.fwnode = flash->indicator_node;
 	init_data.devicename = "as3645a";
 	init_data.default_label = "indicator";
 
 	rval = led_classdev_register_ext(&flash->client->dev, iled_cdev,
 					 &init_data);
-```
+  ```
 
-注册的代码比较长，就不贴出来了。
-完成的主要功能如下：
-- 1.根据初始据使用led_compose_name接口形成一个名字（没有初始数据就用led_cdev中给定的名字）。
-- 2.判断是否已经有这个名字的led设备
-- 3.把led设备注册到sysfs中
-- 4.led链表中的一些处理
+  注册的代码比较长，就不贴出来了。
+  完成的主要功能如下：
+	- 1.根据初始据使用led_compose_name接口形成一个名字（没有初始数据就用led_cdev中给定的名字）。
+	- 2.判断是否已经有这个名字的led设备
+	- 3.把led设备注册到sysfs中
+	- 4.led链表中的一些处理
 
-当我们使用led驱动框架去编写驱动的时候，这个led_classdev_register函数的作用类似于我们之前使用file_operations方式去注册字符设备驱动时的register_chrdev函数。
+  当我们使用led驱动框架去编写驱动的时候，这个led_classdev_register函数的作用类似于我们之前使用file_operations方式去注册字符设备驱动时的register_chrdev函数。
 
-**注销**
+- 5注销
 
-```c
-void led_classdev_unregister(struct led_classdev *led_cdev)
-```
+  ```c
+  void led_classdev_unregister(struct led_classdev *led_cdev)
+  ```
 
-**退出**
+- 6退出
 
-```c
-class_destroy(leds_class);
-```
-销毁注册的led类对象
+  ```c
+  class_destroy(leds_class);
+  ```
+  销毁注册的led类对象
 
-**其他**
+-7 其他
 
-设置led闪烁
-```c
+  设置led闪烁
+  ```c
 void led_blink_set(struct led_classdev *led_cdev,
 		   unsigned long *delay_on,
 		   unsigned long *delay_off)
 
-```
+  ```
 
-设置led闪烁一次
-```c
-void led_blink_set_oneshot(struct led_classdev *led_cdev,
-			   unsigned long *delay_on,
-			   unsigned long *delay_off,
-			   int invert)
-```
-停止led闪烁
-```c
-void led_stop_software_blink(struct led_classdev *led_cdev)
-```
+  设置led闪烁一次
+  ```c
+  void led_blink_set_oneshot(struct led_classdev *led_cdev,
+			     unsigned long *delay_on,
+			     unsigned long *delay_off,
+			     int invert)
+  ```
+  停止led闪烁
+  ```c
+  void led_stop_software_blink(struct led_classdev *led_cdev)
+  ```
 ## 三：示例
 
 **1.led最简单示例**
@@ -365,11 +366,92 @@ int (*remove)(struct i2c_client *);
 
 >probe何时被调用：在总线上驱动和设备的名字匹配，就会调用驱动的probe函数
 
-对于probe的功能主要是做一些资源分配、注册、初始化等
+对于probe的功能主要是做一些资源分配、注册、初始化等。
 
+dts需要修改的代码
 
+```dts
+&qupv3_se19_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <400000>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	fan_power@75 {
+		compatible = "qcom,dc-fan-power";
+		reg = <0x75>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&fan_power_en_gpio6_default>;
+	};
+	Led_driver@0x5B{
+		compatible = "qcom,AW9106A";
+		reg = <0x5B>;
+		status = "okay";
+		// imax 9.25、18.5、27.75、37ma
+        //aw9106,led {
+		battery_led0 {
+            aw9106,name = "aw9106_led0";
+            aw9106,imax = <3>;
+            aw9106,brightness = <6>;
+            aw9106,max_brightness = <255>;
+            aw9106,rise_time = <2>;
+            aw9106,on_time = <2>;
+            aw9106,fall_time = <2>;
+            aw9106,off_time = <2>;
+        };
+		battery_led1 {
+            aw9106,name = "aw9106_led1";
+            aw9106,imax = <3>;
+            aw9106,brightness = <30>;
+            aw9106,max_brightness = <255>;
+            aw9106,rise_time = <20>;
+            aw9106,on_time = <20>;
+            aw9106,fall_time = <2>;
+            aw9106,off_time = <2>;
+        };
+		battery_led2 {
+            aw9106,name = "aw9106_led2";
+            aw9106,imax = <3>;
+            aw9106,brightness = <66>;
+            aw9106,max_brightness = <255>;
+            aw9106,rise_time = <60>;
+            aw9106,on_time = <6>;
+            aw9106,fall_time = <2>;
+            aw9106,off_time = <2>;
+        };
+		battery_led3 {
+            aw9106,name = "aw9106_led3";
+            aw9106,imax = <3>;
+            aw9106,brightness = <126>;
+            aw9106,max_brightness = <255>;
+            aw9106,rise_time = <120>;
+            aw9106,on_time = <6>;
+            aw9106,fall_time = <2>;
+            aw9106,off_time = <20>;
+        };
+	};
+};
+```
+
+**2.led trigger示例**
 
 ## 四：总结
+
+添加一个led驱动主要修改如下位置：
+- 1.在drivers/leds/中添加c代码，如果需要添加头文件要在include/linux中添加。
+- 2.修改Kconfig,如下
+  ```shell
+  config LED_Driver9106
+	tristate "LED Driver for AW9106"
+  ```
+- 3.修改Makefile
+  `CONFIG_LED_Driver9106`是CONFIG_ + LED_Driver9106（Kconfig中定义）
+  ```makefile
+  obj-$(CONFIG_LED_Driver9106)		+= led_trigger_simple.o
+  ```
+- 4.还没完，还要在对应平台下添加（不明白为啥这样重复添加）
+路径:`msm-4.19/arch/arm64/configs/vendor/kona-perf_defconfig`
+添加:`CONFIG_LED_Driver9106=y`
+
 
 
 
